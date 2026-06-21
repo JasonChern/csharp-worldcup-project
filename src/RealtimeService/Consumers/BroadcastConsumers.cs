@@ -33,6 +33,23 @@ public sealed class ScoreBroadcastConsumer : IConsumer<MatchScoreChanged>
     }
 }
 
+public sealed class OddsBroadcastConsumer : IConsumer<OddsChanged>
+{
+    private readonly IHubContext<LiveHub> _hub;
+    public OddsBroadcastConsumer(IHubContext<LiveHub> hub) => _hub = hub;
+
+    public Task Consume(ConsumeContext<OddsChanged> context)
+    {
+        var e = context.Message;
+        return _hub.Clients.All.SendAsync("OddsUpdated", new
+        {
+            matchExternalId = e.MatchExternalId,
+            selectionExternalId = e.SelectionExternalId,
+            newOdds = e.NewOdds
+        });
+    }
+}
+
 public sealed class StatusBroadcastConsumer : IConsumer<MatchStatusChanged>
 {
     private readonly IHubContext<LiveHub> _hub;

@@ -36,7 +36,14 @@ public record MatchSummary(
     string HomeTeamEn,
     string? HomeTeamZh,
     string AwayTeamEn,
-    string? AwayTeamZh);
+    string? AwayTeamZh,
+    // 主盤 1X2 最新賠率（可能為 null，例如 live 場無全場 1X2）
+    string? HomeSelId = null,
+    decimal? HomeOdds = null,
+    string? DrawSelId = null,
+    decimal? DrawOdds = null,
+    string? AwaySelId = null,
+    decimal? AwayOdds = null);
 
 public record MarketWithOdds(
     string MarketExternalId,

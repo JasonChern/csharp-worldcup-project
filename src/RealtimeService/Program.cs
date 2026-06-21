@@ -22,6 +22,7 @@ builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<ScoreBroadcastConsumer>();
     x.AddConsumer<StatusBroadcastConsumer>();
+    x.AddConsumer<OddsBroadcastConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         cfg.Host(rabbitHost, "/", h => { h.Username(rabbitUser); h.Password(rabbitPass); });

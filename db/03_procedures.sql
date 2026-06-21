@@ -219,10 +219,28 @@ BEGIN
            m.LivePhase, m.MatchMinute,
            m.TournamentNameEn, m.TournamentNameZh,
            h.NameEn AS HomeTeamEn, h.NameZh AS HomeTeamZh,
-           a.NameEn AS AwayTeamEn, a.NameZh AS AwayTeamZh
+           a.NameEn AS AwayTeamEn, a.NameZh AS AwayTeamZh,
+           ml.HomeSelId, ml.HomeOdds, ml.DrawSelId, ml.DrawOdds, ml.AwaySelId, ml.AwayOdds
     FROM dbo.Matches m
     JOIN dbo.Teams h ON h.TeamId = m.HomeTeamId
     JOIN dbo.Teams a ON a.TeamId = m.AwayTeamId
+    OUTER APPLY (
+        -- 主盤 1X2（Money Line / 不讓分）三選項的最新賠率與選項 id
+        SELECT
+            MAX(CASE WHEN s.Side = 'H' THEN s.ExternalId END) AS HomeSelId,
+            MAX(CASE WHEN s.Side = 'H' THEN o.DecimalOdds END) AS HomeOdds,
+            MAX(CASE WHEN s.Side = 'D' THEN s.ExternalId END) AS DrawSelId,
+            MAX(CASE WHEN s.Side = 'D' THEN o.DecimalOdds END) AS DrawOdds,
+            MAX(CASE WHEN s.Side = 'A' THEN s.ExternalId END) AS AwaySelId,
+            MAX(CASE WHEN s.Side = 'A' THEN o.DecimalOdds END) AS AwayOdds
+        FROM dbo.Markets k
+        JOIN dbo.MarketSelections s ON s.MarketId = k.MarketId
+        OUTER APPLY (
+            SELECT TOP 1 os.DecimalOdds FROM dbo.OddsSnapshots os
+            WHERE os.SelectionId = s.SelectionId ORDER BY os.SnapshotId DESC
+        ) o
+        WHERE k.MatchId = m.MatchId AND k.NameEn = '1x2' AND s.Side IN ('H','D','A')
+    ) ml
     WHERE (@TournamentExternalId IS NULL OR m.TournamentExternalId = @TournamentExternalId)
     ORDER BY m.KickoffUtc;
 END
