@@ -1,0 +1,49 @@
+# ---- .NET ----
+bin/
+obj/
+out/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+artifacts/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+
+# Rider / VS / VS Code
+.idea/
+.vs/
+.vscode/
+*.swp
+
+# Test / coverage
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+*.trx
+
+# ---- Environment / secrets ----
+*.env
+.env.*
+appsettings.*.local.json
+secrets.json
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Docker ----
+# (keep docker-compose.yml & Dockerfiles tracked)
+**/.docker/
+
+# ---- Local data ----
+*.mdf
+*.ldf
+/data/

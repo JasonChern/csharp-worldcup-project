@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Application\WorldCup.MatchService.Application.csproj" />
+    <ProjectReference Include="..\Infrastructure\WorldCup.MatchService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Contracts\WorldCup.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- 把 DB 腳本複製到輸出的 db/ 供 DbInitializer 讀取（本機與容器皆適用） -->
+  <ItemGroup>
+    <Content Include="..\..\..\db\*.sql" Link="db\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

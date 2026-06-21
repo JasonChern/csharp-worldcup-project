@@ -1,0 +1,43 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Your_strong_Pass123"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql        # 資料持久化：容器移除/重建後資料仍在
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"Your_strong_Pass123\" -C -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  matchservice:
+    build:
+      context: .
+      dockerfile: Dockerfile.matchservice
+    environment:
+      ConnectionStrings__MatchDb: "Server=sqlserver,1433;Database=MatchDb;User Id=sa;Password=Your_strong_Pass123;TrustServerCertificate=True;Encrypt=False"
+      Database__ScriptsPath: "db"
+    ports:
+      - "5080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion
+    environment:
+      Ingestion__MatchServiceBaseUrl: "http://matchservice:8080"
+      Ingestion__WorldCupTournamentId: "29614"
+      Ingestion__IntervalSeconds: "300"
+    depends_on:
+      - matchservice
+
+volumes:
+  mssql-data:
