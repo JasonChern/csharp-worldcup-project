@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorldCup Live Hub — 架構總覽</title>
+<style>
+  :root {
+    --ground: #0c1130;
+    --panel: #151c44;
+    --panel-2: #1b2350;
+    --text: #e9ecf7;
+    --muted: #8b93c4;
+    --line: #2a3366;
+    --accent: #ffb43d;   /* broadcast amber */
+    --live: #ff495f;      /* live red */
+    --pre: #6f7bd6;       /* pre-match blue */
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 600px at 80% -10%, #1a2356 0%, rgba(26,35,86,0) 60%),
+      radial-gradient(900px 500px at 0% 0%, #161d44 0%, rgba(22,29,68,0) 55%),
+      var(--ground);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px; }
+  .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+  .eyebrow {
+    font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 10px;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    border-bottom: 1px solid var(--line);
+    background: rgba(12,17,48,.7);
+    backdrop-filter: blur(6px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar .row { display: flex; align-items: center; justify-content: space-between; height: 58px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.01em; }
+  .brand .ball { font-size: 20px; }
+  .livechip {
+    display: inline-flex; align-items: center; gap: 7px; font-family: ui-monospace, monospace;
+    font-size: 11px; letter-spacing: .14em; color: var(--live);
+    border: 1px solid color-mix(in srgb, var(--live) 45%, transparent);
+    padding: 4px 11px; border-radius: 999px; text-transform: uppercase;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--live); }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 60%, transparent); } 50% { opacity: .55; box-shadow: 0 0 0 6px transparent; } }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 64px 0 30px; }
+  .hero h1 { font-size: clamp(34px, 6vw, 60px); }
+  .hero h1 .amber { color: var(--accent); }
+  .hero p.lead { color: var(--muted); font-size: clamp(15px, 2.2vw, 19px); max-width: 660px; margin: 18px 0 0; }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+  .fact {
+    flex: 1 1 150px; border: 1px solid var(--line); border-radius: 14px;
+    background: linear-gradient(180deg, var(--panel) 0%, rgba(21,28,68,.5) 100%);
+    padding: 16px 18px;
+  }
+  .fact .n { font-size: 30px; font-weight: 800; letter-spacing: -.03em; }
+  .fact .n .u { font-size: 14px; color: var(--accent); font-weight: 700; margin-left: 3px; }
+  .fact .l { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); letter-spacing: .04em; margin-top: 4px; }
+
+  /* ---------- sections ---------- */
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  section > .wrap > h2 { font-size: clamp(22px, 3.4vw, 30px); }
+  .sub { color: var(--muted); margin: 10px 0 26px; max-width: 680px; }
+
+  /* feature grid */
+  .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .feat { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 18px; }
+  .feat .ic { font-size: 22px; }
+  .feat h3 { font-size: 16px; margin: 10px 0 6px; }
+  .feat p { color: var(--muted); font-size: 14px; margin: 0; }
+
+  /* ---------- pipeline ---------- */
+  .pipe { display: grid; gap: 0; }
+  .stage { display: grid; grid-template-columns: 54px 1fr; gap: 16px; }
+  .stage .rail { display: flex; flex-direction: column; align-items: center; }
+  .stage .num {
+    width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+    font-family: ui-monospace, monospace; font-weight: 700; font-size: 14px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--accent);
+  }
+  .stage .spine { flex: 1; width: 2px; margin: 6px 0; background: linear-gradient(var(--accent), var(--line)); opacity: .5; }
+  .stage:last-child .spine { display: none; }
+  .stage .body { padding-bottom: 26px; }
+  .stage h3 { font-size: 17px; }
+  .stage .desc { color: var(--muted); font-size: 14px; margin: 5px 0 12px; }
+
+  .nodes { display: flex; flex-wrap: wrap; gap: 10px; }
+  .node {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+    padding: 11px 14px; min-width: 150px;
+  }
+  .node .svc { font-weight: 700; font-size: 14px; }
+  .node .meta { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .node.live { border-color: color-mix(in srgb, var(--live) 50%, var(--line)); }
+  .node.hub { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+
+  .wire { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+  .tag {
+    font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 7px; background: var(--panel-2); color: var(--muted);
+    border: 1px solid var(--line);
+  }
+  .tag.ev { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+  .tag.live { color: var(--live); border-color: color-mix(in srgb, var(--live) 35%, var(--line)); }
+  .arrow { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; align-self: center; }
+
+  /* ---------- services table ---------- */
+  .svctable { display: grid; gap: 8px; }
+  .svc-row {
+    display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: baseline;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 13px 16px;
+  }
+  .svc-row .name { font-family: ui-monospace, monospace; font-weight: 700; font-size: 13px; color: var(--accent); }
+  .svc-row .role { color: var(--muted); font-size: 14px; }
+  .svc-row .role b { color: var(--text); font-weight: 600; }
+
+  /* chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; }
+  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 7px 14px; font-size: 13px; }
+  .chip .mono { color: var(--accent); }
+
+  footer { padding: 30px 0 60px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+
+  .scroll-x { overflow-x: auto; }
+  @media (max-width: 560px) {
+    .stage { grid-template-columns: 40px 1fr; gap: 10px; }
+    .svc-row { grid-template-columns: 1fr; gap: 4px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap row">
+    <div class="brand"><span class="ball">⚽</span> WorldCup Live Hub</div>
+    <span class="livechip"><span class="dot pulse"></span> Live Data</span>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">事件驅動微服務 · 即時世足資料平台</p>
+    <h1>把世界盃的<span class="amber"> 比分、狀態與賠率</span><br>即時送到你眼前</h1>
+    <p class="lead">
+      從台灣運彩的賽前與即時 API 擷取真實世足資料，經過一條
+      <b style="color:var(--text)">資料庫交易 → Outbox → 訊息佇列 → SignalR</b>
+      的事件管線，讓前端看板的比分、時間與賠率「自己會動」——不用重整、不用輪詢。
+    </p>
+
+    <div class="facts">
+      <div class="fact"><div class="n">6<span class="u">服務</span></div><div class="l">.NET 微服務 + React 前端</div></div>
+      <div class="fact"><div class="n">9<span class="u">容器</span></div><div class="l">docker compose 一鍵啟動</div></div>
+      <div class="fact"><div class="n">4<span class="u">推播</span></div><div class="l">比分 / 狀態 / 賠率 / 時鐘</div></div>
+      <div class="fact"><div class="n">2<span class="u">來源</span></div><div class="l">賽前 Pre + 即時 Live</div></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">這是什麼</p>
+    <h2>一個用來練「即時資料管線」的後端專案</h2>
+    <p class="sub">
+      主題是世界盃，但真正的重點是後端架構：微服務如何分工、資料怎麼跨服務流動、
+      以及怎麼在「資料庫一致性」與「即時推播」之間取得平衡。所有資料都是線上真實賽事，
+      不是假資料。
+    </p>
+    <div class="features">
+      <div class="feat"><div class="ic">🔴</div><h3>即時比分與狀態</h3><p>進球、半場、結束即時更新；比賽時間在前端每秒平滑走鐘並向伺服器校準。</p></div>
+      <div class="feat"><div class="ic">💹</div><h3>賽前 + 即時賠率</h3><p>賽前盤與 in-play 盤分別擷取；賠率只在「真的變動」時記錄與推播。</p></div>
+      <div class="feat"><div class="ic">📈</div><h3>賠率走勢圖</h3><p>每個投注選項的賠率時序，點開即見走勢，並隨即時變動長出新點。</p></div>
+      <div class="feat"><div class="ic">🌐</div><h3>中英雙語</h3><p>隊伍、玩法、選項都有中英文；以語言無關的 ID 合併兩個語系來源。</p></div>
+      <div class="feat"><div class="ic">🏷️</div><h3>賽前 / 即時來源標記</h3><p>每個盤口標記來自賽前或進行中，前端清楚分區呈現。</p></div>
+      <div class="feat"><div class="ic">🧾</div><h3>賽程與開賽時間</h3><p>未開賽顯示開賽時間，進行中顯示比分與分鐘，結束標記已結束。</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">資料如何流動</p>
+    <h2>一條事件管線，從擷取到你的螢幕</h2>
+    <p class="sub">
+      每個服務只做一件事，彼此只透過 HTTP 與訊息事件溝通。下面依資料流動的順序拆成五段：
+    </p>
+
+    <div class="pipe scroll-x">
+
+      <div class="stage">
+        <div class="rail"><div class="num">01</div><div class="spine"></div></div>
+        <div class="body">
+          <h3>擷取 — 從運彩 API 拿真實資料</h3>
+          <p class="desc">兩個 Worker 各司其職、不同節奏，抓取後正規化並換算賠率，再 POST 給 Match Service。</p>
+          <div class="nodes">
+            <div class="node"><div class="svc">IngestionJob</div><div class="meta">賽前 Pre · 每 5 分鐘</div></div>
+            <div class="node live"><div class="svc">LiveIngestion</div><div class="meta">即時 Live · 每 ~12 秒</div></div>
+          </div>
+          <div class="wire"><span class="tag">en + zh 兩版合併</span><span class="arrow">──HTTP POST──▶</span><span class="tag">/api/fixtures/upsert</span><span class="tag">/api/live/upsert</span></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="rail"><div class="num">02</div><div class="spine"></div></div>
+        <div class="body">
+          <h3>寫入 — Match Service（唯一寫庫者）</h3>
+          <p class="desc">用 Stored Procedure + TVP 批次寫入；在同一個交易內，把「資料變更」與「待發事件」一起寫進 Outbox，確保一致。</p>
+          <div class="nodes">
+            <div class="node"><div class="svc">MatchService</div><div class="meta">Clean Architecture · Dapper + SP</div></div>
+            <div class="node"><div class="svc">MatchDb (MSSQL)</div><div class="meta">+ OutboxMessages</div></div>
+          </div>
+          <div class="wire"><span class="tag">TVP 批次</span><span class="tag">set-based MERGE</span><span class="tag ev">變動才寫快照 / 事件</span></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="rail"><div class="num">03</div><div class="spine"></div></div>
+        <div class="body">
+          <h3>發布 — Outbox Publisher → 訊息佇列</h3>
+          <p class="desc">輪詢未發送的 Outbox 事件，透過 MassTransit 發布到 RabbitMQ，成功後標記已發（at-least-once）。</p>
+          <div class="nodes">
+            <div class="node"><div class="svc">OutboxPublisher</div><div class="meta">輪詢 → 發布 → 標記</div></div>
+            <div class="node hub"><div class="svc">RabbitMQ</div><div class="meta">MassTransit</div></div>
+          </div>
+          <div class="wire">
+            <span class="tag ev">OddsChanged</span><span class="tag ev">MatchScoreChanged</span><span class="tag ev">MatchStatusChanged</span>
+            <span class="tag live">MatchClock（LiveIngestion 直接發，不走 Outbox）</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="rail"><div class="num">04</div><div class="spine"></div></div>
+        <div class="body">
+          <h3>訂閱 — 兩個下游各取所需</h3>
+          <p class="desc">同一則事件以 fan-out 同時送達兩個服務：一個負責推前端，一個記錄通知。</p>
+          <div class="nodes">
+            <div class="node hub"><div class="svc">RealtimeService</div><div class="meta">SignalR Hub /hubs/live</div></div>
+            <div class="node"><div class="svc">NotificationService</div><div class="meta">訂閱事件 → log（通知雛形）</div></div>
+          </div>
+          <div class="wire"><span class="tag ev">ScoreUpdated</span><span class="tag ev">StatusUpdated</span><span class="tag ev">OddsUpdated</span><span class="tag ev">ClockUpdated</span></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="rail"><div class="num">05</div></div>
+        <div class="body">
+          <h3>呈現 — React 即時看板</h3>
+          <p class="desc">載入時打 REST 取初始清單，之後全靠 SignalR(WebSocket) 即時更新。比分、時間、賠率自己會動。</p>
+          <div class="nodes">
+            <div class="node"><div class="svc">Frontend</div><div class="meta">React + Vite · nginx :8088</div></div>
+          </div>
+          <div class="wire"><span class="arrow">◀──WebSocket──</span><span class="tag">看板 / 玩法明細 / 賠率走勢圖</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">服務一覽</p>
+    <h2>6 個 .NET 服務 + 1 個前端</h2>
+    <p class="sub">外加 SQL Server 與 RabbitMQ 兩個基礎設施容器，共 9 個容器。各服務只透過 HTTP 與事件溝通。</p>
+    <div class="svctable">
+      <div class="svc-row"><div class="name">MatchService</div><div class="role"><b>核心 API + 資料庫</b>。唯一寫 MatchDb 者；REST API；Dapper 呼叫 Stored Procedure；啟動時套用 DB 腳本。</div></div>
+      <div class="svc-row"><div class="name">IngestionJob</div><div class="role"><b>賽前擷取</b>。每 5 分鐘抓運彩 Pre feed，合併中英、換算賠率，寫入賽程與盤口。</div></div>
+      <div class="svc-row"><div class="name">LiveIngestion</div><div class="role"><b>即時擷取</b>。每 ~12 秒抓 Live feed，解析比分/狀態/分鐘與 in-play 賠率；並每輪直接發比賽時鐘。</div></div>
+      <div class="svc-row"><div class="name">OutboxPublisher</div><div class="role"><b>事件發布</b>。把資料庫 Outbox 裡的事件可靠地發布到 RabbitMQ（at-least-once）。</div></div>
+      <div class="svc-row"><div class="name">RealtimeService</div><div class="role"><b>即時推送</b>。訂閱事件，經 SignalR Hub 推給所有前端連線。</div></div>
+      <div class="svc-row"><div class="name">NotificationService</div><div class="role"><b>通知</b>。訂閱比分/狀態/賠率事件並記錄（個人化通知的基礎）。</div></div>
+      <div class="svc-row"><div class="name">frontend</div><div class="role"><b>React 即時看板</b>。賽事看板、玩法明細、賠率走勢圖；以 nginx 提供。</div></div>
+      <div class="svc-row"><div class="name">Contracts</div><div class="role"><b>共用契約</b>（函式庫，非服務）。傳輸 DTO 與事件型別，被各服務參考以保證型別一致。</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">技術棧</p>
+    <h2>用到的東西</h2>
+    <div class="chips" style="margin-top:18px">
+      <span class="chip mono">.NET 8</span>
+      <span class="chip">ASP.NET Core <span class="mono">Minimal API</span></span>
+      <span class="chip">Clean Architecture</span>
+      <span class="chip">MSSQL <span class="mono">Stored Procedure · TVP</span></span>
+      <span class="chip mono">Dapper</span>
+      <span class="chip">Outbox Pattern</span>
+      <span class="chip">RabbitMQ <span class="mono">MassTransit</span></span>
+      <span class="chip mono">SignalR</span>
+      <span class="chip">React + Vite + TS</span>
+      <span class="chip mono">recharts</span>
+      <span class="chip">docker compose</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    WorldCup Live Hub · 事件驅動的即時世足資料平台 · 賽前 + 即時雙來源、全程真實資料 ·
+    <span class="mono" style="color:var(--accent)">docker compose up --build → localhost:8088</span>
+  </div>
+</footer>
+
+</body>
+</html>
