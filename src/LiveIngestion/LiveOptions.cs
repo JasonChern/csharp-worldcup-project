@@ -9,4 +9,7 @@ public sealed class LiveOptions
     public string MatchServiceBaseUrl { get; set; } = "http://localhost:5080";
     public string WorldCupTournamentId { get; set; } = "29614";
     public int IntervalSeconds { get; set; } = 12;
+    public string RabbitHost { get; set; } = "localhost";
+    public string RabbitUser { get; set; } = "guest";
+    public string RabbitPass { get; set; } = "guest";
 }

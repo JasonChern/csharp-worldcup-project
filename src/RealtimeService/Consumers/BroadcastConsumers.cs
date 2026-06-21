@@ -50,6 +50,24 @@ public sealed class OddsBroadcastConsumer : IConsumer<OddsChanged>
     }
 }
 
+public sealed class ClockBroadcastConsumer : IConsumer<MatchClock>
+{
+    private readonly IHubContext<LiveHub> _hub;
+    public ClockBroadcastConsumer(IHubContext<LiveHub> hub) => _hub = hub;
+
+    public Task Consume(ConsumeContext<MatchClock> context)
+    {
+        var e = context.Message;
+        return _hub.Clients.All.SendAsync("ClockUpdated", new
+        {
+            matchExternalId = e.MatchExternalId,
+            matchMinute = e.MatchMinute,
+            livePhase = e.LivePhase,
+            running = e.Running
+        });
+    }
+}
+
 public sealed class StatusBroadcastConsumer : IConsumer<MatchStatusChanged>
 {
     private readonly IHubContext<LiveHub> _hub;

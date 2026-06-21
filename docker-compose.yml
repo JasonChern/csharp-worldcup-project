@@ -60,8 +60,12 @@ services:
       Live__MatchServiceBaseUrl: "http://matchservice:8080"
       Live__WorldCupTournamentId: "29614"
       Live__IntervalSeconds: "12"
+      Live__RabbitHost: "rabbitmq"
     depends_on:
-      - matchservice
+      matchservice:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
 
   outboxpublisher:
     build:

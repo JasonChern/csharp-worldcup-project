@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import { fetchMatches, fetchMatchMarkets, Match, MarketRow, REALTIME_URL } from "./api";
+import { ClockState, display, isPausedPhase, resync } from "./clock";
 
 type Conn = "connecting" | "connected" | "disconnected";
 
 const teamName = (zh: string | null, en: string) => zh ?? en;
 const fmtOdds = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(2));
 
-function statusLabel(m: Match): string {
-  if (m.status === "Live")
-    return `🔴 ${m.livePhase ?? "進行中"}${m.matchMinute ? ` ${m.matchMinute}` : ""}`;
+function statusLabel(m: Match, clockText: string | null): string {
+  if (m.status === "Live") {
+    const t = clockText ?? m.matchMinute ?? "進行中";
+    return `🔴 ${m.livePhase ?? ""} ${t}`.trim();
+  }
   if (m.status === "Ended") return "✓ 已結束";
   return "○ 未開賽";
 }
@@ -18,8 +21,16 @@ export function App() {
   const [matches, setMatches] = useState<Record<string, Match>>({});
   const [conn, setConn] = useState<Conn>("connecting");
   const [odds, setOdds] = useState<Record<string, number>>({});
+  const [clocks, setClocks] = useState<Record<string, ClockState>>({});
+  const [nowMs, setNowMs] = useState<number>(Date.now());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [markets, setMarkets] = useState<MarketRow[]>([]);
+
+  // 每秒重繪，讓走鐘平滑前進
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const seedOdds = (entries: [string | null, number | null][]) =>
     setOdds((prev) => {
@@ -35,11 +46,18 @@ export function App() {
         if (!mounted) return;
         const map: Record<string, Match> = {};
         const seed: [string | null, number | null][] = [];
+        const ck: Record<string, ClockState> = {};
+        const t0 = Date.now();
         for (const m of list) {
           map[m.externalId] = m;
           seed.push([m.homeSelId, m.homeOdds], [m.drawSelId, m.drawOdds], [m.awaySelId, m.awayOdds]);
+          if (m.status === "Live") {
+            const c = resync(undefined, m.matchMinute, m.livePhase, !isPausedPhase(m.livePhase), t0);
+            if (c) ck[m.externalId] = c;
+          }
         }
         setMatches(map);
+        setClocks(ck);
         seedOdds(seed);
       })
       .catch((e) => console.error(e));
@@ -65,6 +83,13 @@ export function App() {
 
     hub.on("OddsUpdated", (p: { matchExternalId: string; selectionExternalId: string; newOdds: number }) =>
       setOdds((prev) => ({ ...prev, [p.selectionExternalId]: p.newOdds }))
+    );
+
+    hub.on("ClockUpdated", (p: { matchExternalId: string; matchMinute: string | null; livePhase: string | null; running: boolean }) =>
+      setClocks((prev) => {
+        const next = resync(prev[p.matchExternalId], p.matchMinute, p.livePhase, p.running, Date.now());
+        return next ? { ...prev, [p.matchExternalId]: next } : prev;
+      })
     );
 
     hub.onreconnecting(() => setConn("connecting"));
@@ -120,7 +145,7 @@ export function App() {
                 <div style={{ textAlign: "right", fontWeight: 600 }}>{teamName(m.homeTeamZh, m.homeTeamEn)}</div>
                 <div style={{ textAlign: "center", minWidth: 92 }}>
                   <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{m.homeScore} : {m.awayScore}</div>
-                  <div style={{ fontSize: 11, color: live ? "#c33" : "#888" }}>{statusLabel(m)}</div>
+                  <div style={{ fontSize: 11, color: live ? "#c33" : "#888" }}>{statusLabel(m, display(clocks[m.externalId], nowMs))}</div>
                 </div>
                 <div style={{ textAlign: "left", fontWeight: 600 }}>{teamName(m.awayTeamZh, m.awayTeamEn)}</div>
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
