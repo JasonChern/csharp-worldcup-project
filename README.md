@@ -24,6 +24,8 @@ src/
   LiveIngestion/                 ← M-Live：高頻抓 Live feed，解析 ldss（比分/狀態）+ in-play 賠率
   OutboxPublisher/               ← M3：輪詢 OutboxMessages → MassTransit/RabbitMQ → 標記已發
   NotificationService/           ← M3+：訂閱 OddsChanged / MatchScoreChanged / MatchStatusChanged → 印 log
+  RealtimeService/               ← M4：SignalR Hub + 訂閱事件 → push 比分/狀態給前端
+  frontend/                      ← M4：React + Vite + TS 即時看板（nginx 提供）
 db/
   01_schema.sql 02_types.sql 03_procedures.sql   啟動時由 DbInitializer 套用
 ```
@@ -53,10 +55,16 @@ docker compose up --build
 ```
 
 啟動後：
+- **前端即時看板：http://localhost:8088** ← 開這個看比分即時跳動
 - Match Service：http://localhost:5080
+- Realtime（SignalR）：http://localhost:5090（hub: `/hubs/live`）
 - SQL Server：localhost:1433（sa / Your_strong_Pass123）
 - RabbitMQ 管理介面：http://localhost:15672（guest / guest）
-- Ingestion 每 5 分鐘擷取一次；賠率變動 → OutboxPublisher 發布 → NotificationService 收到印 log
+- Ingestion 每 5 分鐘擷取賽前；LiveIngestion 每 ~12 秒擷取進行中；比分/賠率變動 → Outbox → RabbitMQ → SignalR/Notification
+
+## 即時看板（M4）
+- `RealtimeService` 訂閱 `MatchScoreChanged`/`MatchStatusChanged`，經 SignalR Hub（`/hubs/live`）推給前端。
+- 前端載入時打 `GET /api/matches` 取初始清單，再以 SignalR 接收 `ScoreUpdated`/`StatusUpdated` 即時更新。
 
 ## API
 

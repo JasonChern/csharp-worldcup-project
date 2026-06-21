@@ -8,7 +8,14 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<FixtureIngestionService>();
 builder.Services.AddEndpointsApiExplorer();
 
+var corsOrigins = (builder.Configuration["Cors:Origins"] ?? "http://localhost:8088,http://localhost:5173")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
+    .WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
+
 var app = builder.Build();
+
+app.UseCors();
 
 // 啟動時初始化 DB（schema/types/procedures，冪等）
 using (var scope = app.Services.CreateScope())
