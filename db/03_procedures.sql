@@ -378,7 +378,8 @@ BEGIN
             WHERE m.Status = 'Live'
               AND (m.LastSeenLiveUtc IS NULL
                    OR m.LastSeenLiveUtc < DATEADD(MINUTE, -@StaleGraceMinutes, SYSUTCDATETIME()))
-              AND m.KickoffUtc < DATEADD(MINUTE, -150, SYSUTCDATETIME());
+              AND (m.LivePhase = '2h'                                          -- 下半場後消失＝踢完
+                   OR m.KickoffUtc < DATEADD(MINUTE, -125, SYSUTCDATETIME())); -- 保險：遠超正常時長
 
             UPDATE m SET m.Status = 'Ended'
             FROM dbo.Matches m JOIN #stale st ON st.MatchId = m.MatchId;
