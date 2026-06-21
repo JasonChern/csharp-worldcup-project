@@ -99,7 +99,13 @@ IF COL_LENGTH('dbo.Matches', 'LivePhase') IS NULL
     ALTER TABLE dbo.Matches ADD LivePhase NVARCHAR(16) NULL;        -- raw status, e.g. "1h"
 GO
 IF COL_LENGTH('dbo.Matches', 'MatchMinute') IS NULL
-    ALTER TABLE dbo.Matches ADD MatchMinute NVARCHAR(8) NULL;       -- e.g. "1:15"
+    ALTER TABLE dbo.Matches ADD MatchMinute NVARCHAR(32) NULL;      -- e.g. "1:15"、"45:00 +2"
+GO
+-- 加寬既有的小欄位（早期建為 NVARCHAR(8)，傷停時間如 "45:00 +2" 會超長）
+IF COL_LENGTH('dbo.Matches', 'MatchMinute') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Matches')
+               AND name = 'MatchMinute' AND max_length < 64)
+    ALTER TABLE dbo.Matches ALTER COLUMN MatchMinute NVARCHAR(32) NULL;
 GO
 IF COL_LENGTH('dbo.Matches', 'LastSeenLiveUtc') IS NULL
     ALTER TABLE dbo.Matches ADD LastSeenLiveUtc DATETIME2 NULL;     -- 最近一次出現在 live feed
