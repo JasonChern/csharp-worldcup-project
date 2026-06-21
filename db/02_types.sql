@@ -54,3 +54,14 @@ CREATE TYPE dbo.OddsTvp AS TABLE (
     DecimalOdds          DECIMAL(10,4) NOT NULL
 );
 GO
+
+IF TYPE_ID('dbo.LiveStateTvp') IS NULL
+CREATE TYPE dbo.LiveStateTvp AS TABLE (
+    MatchExternalId NVARCHAR(64) NOT NULL,
+    HomeScore       INT NOT NULL,
+    AwayScore       INT NOT NULL,
+    DomainStatus    VARCHAR(20) NOT NULL,    -- Scheduled/Live/Ended
+    LivePhase       NVARCHAR(16) NULL,
+    MatchMinute     NVARCHAR(8) NULL
+);
+GO

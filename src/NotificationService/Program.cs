@@ -10,6 +10,8 @@ var pass = builder.Configuration["RabbitMq:Password"] ?? "guest";
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<OddsChangedConsumer>();
+    x.AddConsumer<MatchScoreChangedConsumer>();
+    x.AddConsumer<MatchStatusChangedConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         cfg.Host(host, "/", h =>

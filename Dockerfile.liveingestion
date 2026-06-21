@@ -1,0 +1,13 @@
+# Live Ingestion (Worker：高頻抓 Live feed → 解析 ldss + in-play 賠率 → POST /api/live/upsert)
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY WorldCupLiveHub.sln ./
+COPY src/Contracts/ src/Contracts/
+COPY src/LiveIngestion/ src/LiveIngestion/
+RUN dotnet restore src/LiveIngestion/WorldCup.LiveIngestion.csproj
+RUN dotnet publish src/LiveIngestion/WorldCup.LiveIngestion.csproj -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish ./
+ENTRYPOINT ["dotnet", "WorldCup.LiveIngestion.dll"]

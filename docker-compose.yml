@@ -51,6 +51,17 @@ services:
     depends_on:
       - matchservice
 
+  liveingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile.liveingestion
+    environment:
+      Live__MatchServiceBaseUrl: "http://matchservice:8080"
+      Live__WorldCupTournamentId: "29614"
+      Live__IntervalSeconds: "12"
+    depends_on:
+      - matchservice
+
   outboxpublisher:
     build:
       context: .

@@ -14,6 +14,32 @@ public sealed class SqlFixtureRepository : IFixtureRepository
 
     public async Task<IngestResult> IngestBatchAsync(UpsertFixturesRequest request, CancellationToken ct)
     {
+        var p = BuildFixtureParams(request.Fixtures);
+        await using var conn = _factory.Create();
+        var cmd = new CommandDefinition("dbo.sp_IngestWorldCupBatch", p,
+            commandType: CommandType.StoredProcedure, cancellationToken: ct);
+        return await conn.QueryFirstAsync<IngestResult>(cmd);
+    }
+
+    public async Task<LiveIngestResult> IngestLiveAsync(UpsertLiveRequest request, CancellationToken ct)
+    {
+        var p = BuildFixtureParams(request.Fixtures);
+
+        var live = NewLiveStateTable();
+        foreach (var s in request.LiveStates)
+            live.Rows.Add(s.MatchExternalId, s.HomeScore, s.AwayScore, s.DomainStatus,
+                (object?)s.LivePhase ?? DBNull.Value, (object?)s.MatchMinute ?? DBNull.Value);
+        p.Add("@LiveStates", live.AsTableValuedParameter("dbo.LiveStateTvp"));
+
+        await using var conn = _factory.Create();
+        var cmd = new CommandDefinition("dbo.sp_IngestLiveBatch", p,
+            commandType: CommandType.StoredProcedure, cancellationToken: ct);
+        return await conn.QueryFirstAsync<LiveIngestResult>(cmd);
+    }
+
+    // 共用：把 fixtures 攤平成 teams/matches/markets/selections/odds 五個 TVP
+    private static DynamicParameters BuildFixtureParams(IReadOnlyList<UpsertFixtureRequest> fixtures)
+    {
         var teams = NewTeamsTable();
         var matches = NewMatchesTable();
         var markets = NewMarketsTable();
@@ -21,7 +47,7 @@ public sealed class SqlFixtureRepository : IFixtureRepository
         var odds = NewOddsTable();
 
         var seenTeams = new HashSet<string>();
-        foreach (var f in request.Fixtures)
+        foreach (var f in fixtures)
         {
             AddTeam(teams, seenTeams, f.HomeTeamNameEn, f.HomeTeamNameZh);
             AddTeam(teams, seenTeams, f.AwayTeamNameEn, f.AwayTeamNameZh);
@@ -52,11 +78,19 @@ public sealed class SqlFixtureRepository : IFixtureRepository
         p.Add("@Markets", markets.AsTableValuedParameter("dbo.MarketTvp"));
         p.Add("@Selections", selections.AsTableValuedParameter("dbo.SelectionTvp"));
         p.Add("@Odds", odds.AsTableValuedParameter("dbo.OddsTvp"));
+        return p;
+    }
 
-        await using var conn = _factory.Create();
-        var cmd = new CommandDefinition("dbo.sp_IngestWorldCupBatch", p,
-            commandType: CommandType.StoredProcedure, cancellationToken: ct);
-        return await conn.QueryFirstAsync<IngestResult>(cmd);
+    private static DataTable NewLiveStateTable()
+    {
+        var t = new DataTable();
+        t.Columns.Add("MatchExternalId", typeof(string));
+        t.Columns.Add("HomeScore", typeof(int));
+        t.Columns.Add("AwayScore", typeof(int));
+        t.Columns.Add("DomainStatus", typeof(string));
+        t.Columns.Add("LivePhase", typeof(string));
+        t.Columns.Add("MatchMinute", typeof(string));
+        return t;
     }
 
     private static void AddTeam(DataTable t, HashSet<string> seen, string en, string? zh)

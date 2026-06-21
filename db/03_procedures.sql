@@ -216,6 +216,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT m.ExternalId, m.KickoffUtc, m.Status, m.HomeScore, m.AwayScore,
+           m.LivePhase, m.MatchMinute,
            m.TournamentNameEn, m.TournamentNameZh,
            h.NameEn AS HomeTeamEn, h.NameZh AS HomeTeamZh,
            a.NameEn AS AwayTeamEn, a.NameZh AS AwayTeamZh
@@ -233,7 +234,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT k.ExternalId AS MarketExternalId, k.NameEn AS MarketNameEn, k.NameZh AS MarketNameZh,
-           k.Line, s.ExternalId AS SelectionExternalId,
+           k.Line, k.Source, s.ExternalId AS SelectionExternalId,
            s.NameEn AS SelectionNameEn, s.NameZh AS SelectionNameZh, s.Side,
            o.Pd, o.Pu, o.DecimalOdds, o.FetchedUtc
     FROM dbo.Matches m
@@ -247,5 +248,137 @@ BEGIN
     ) o
     WHERE m.ExternalId = @MatchExternalId
     ORDER BY k.MarketId, s.SelectionId;
+END
+GO
+
+-- ========== Live ingestion ==========
+-- 重用 teams/matches/markets/selections/odds 的 upsert，外加 live 狀態(比分/狀態)更新、
+-- in-play 來源標記(Source='Live')、結束對帳。全部一個交易。
+CREATE OR ALTER PROCEDURE dbo.sp_IngestLiveBatch
+    @Teams      dbo.TeamTvp      READONLY,
+    @Matches    dbo.MatchTvp     READONLY,
+    @Markets    dbo.MarketTvp    READONLY,
+    @Selections dbo.SelectionTvp READONLY,
+    @Odds       dbo.OddsTvp      READONLY,
+    @LiveStates dbo.LiveStateTvp READONLY,
+    @StaleGraceMinutes INT = 2
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @oddsInserted INT = 0, @oddsChanged INT = 0,
+            @scoreChanges INT = 0, @statusChanges INT = 0, @ended INT = 0;
+    BEGIN TRY
+        BEGIN TRAN;
+            EXEC dbo.sp_UpsertTeams      @Teams;
+            EXEC dbo.sp_UpsertMatches    @Matches;
+            EXEC dbo.sp_UpsertMarkets    @Markets;
+            EXEC dbo.sp_UpsertSelections @Selections;
+
+            -- in-play 玩法標記來源
+            UPDATE k SET k.Source = 'Live'
+            FROM dbo.Markets k
+            JOIN @Markets x ON x.MarketExternalId = k.ExternalId;
+
+            -- ---- Live 狀態：比對現存 vs 本次 ----
+            SELECT m.MatchId, m.ExternalId,
+                   m.HomeScore AS OldH, m.AwayScore AS OldA, m.Status AS OldStatus, m.LivePhase AS OldPhase,
+                   ls.HomeScore AS NewH, ls.AwayScore AS NewA, ls.DomainStatus AS NewStatus,
+                   ls.LivePhase AS NewPhase, ls.MatchMinute AS NewMinute
+            INTO #live
+            FROM @LiveStates ls
+            JOIN dbo.Matches m ON m.ExternalId = ls.MatchExternalId;
+
+            UPDATE m
+            SET m.HomeScore = l.NewH, m.AwayScore = l.NewA, m.Status = l.NewStatus,
+                m.LivePhase = l.NewPhase, m.MatchMinute = l.NewMinute,
+                m.LastSeenLiveUtc = SYSUTCDATETIME()
+            FROM dbo.Matches m JOIN #live l ON l.MatchId = m.MatchId;
+
+            -- 比分變動事件
+            INSERT INTO dbo.OutboxMessages (EventType, Payload)
+            SELECT 'MatchScoreChanged',
+                   (SELECT l.ExternalId AS matchExternalId, l.OldH AS oldHome, l.OldA AS oldAway,
+                           l.NewH AS newHome, l.NewA AS newAway, l.NewMinute AS matchMinute,
+                           SYSUTCDATETIME() AS changedUtc
+                    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+            FROM #live l
+            WHERE l.NewH <> l.OldH OR l.NewA <> l.OldA;
+            SET @scoreChanges = @@ROWCOUNT;
+
+            -- 狀態/階段變動事件
+            INSERT INTO dbo.OutboxMessages (EventType, Payload)
+            SELECT 'MatchStatusChanged',
+                   (SELECT l.ExternalId AS matchExternalId, l.OldStatus AS oldStatus,
+                           l.NewStatus AS newStatus, l.NewPhase AS livePhase,
+                           SYSUTCDATETIME() AS changedUtc
+                    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+            FROM #live l
+            WHERE l.NewStatus <> l.OldStatus OR ISNULL(l.NewPhase,'') <> ISNULL(l.OldPhase,'');
+            SET @statusChanges = @@ROWCOUNT;
+
+            -- ---- in-play 賠率：變動才寫快照 + 事件（同 M3） ----
+            SELECT s.SelectionId, s.ExternalId AS SelExt, s.NameEn AS SelName, s.Side,
+                   k.ExternalId AS MarketExt, mt.ExternalId AS MatchExt,
+                   o.Pd, o.Pu, o.DecimalOdds AS NewOdds, prev.DecimalOdds AS PrevOdds
+            INTO #calc
+            FROM @Odds o
+            JOIN dbo.MarketSelections s ON s.ExternalId = o.SelectionExternalId
+            JOIN dbo.Markets k  ON k.MarketId = s.MarketId
+            JOIN dbo.Matches mt ON mt.MatchId = k.MatchId
+            OUTER APPLY (
+                SELECT TOP 1 last.DecimalOdds FROM dbo.OddsSnapshots last
+                WHERE last.SelectionId = s.SelectionId ORDER BY last.SnapshotId DESC
+            ) prev;
+
+            INSERT INTO dbo.OddsSnapshots (SelectionId, Pd, Pu, DecimalOdds)
+            SELECT SelectionId, Pd, Pu, NewOdds FROM #calc
+            WHERE PrevOdds IS NULL OR PrevOdds <> NewOdds;
+            SET @oddsInserted = @@ROWCOUNT;
+
+            INSERT INTO dbo.OutboxMessages (EventType, Payload)
+            SELECT 'OddsChanged',
+                   (SELECT c.MatchExt AS matchExternalId, c.MarketExt AS marketExternalId,
+                           c.SelExt AS selectionExternalId, c.Side AS side, c.SelName AS selectionNameEn,
+                           c.PrevOdds AS oldOdds, c.NewOdds AS newOdds, SYSUTCDATETIME() AS changedUtc
+                    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+            FROM #calc c
+            WHERE c.PrevOdds IS NOT NULL AND c.PrevOdds <> c.NewOdds;
+            SET @oddsChanged = @@ROWCOUNT;
+
+            -- ---- 結束對帳：曾 Live 但已超過寬限未再出現 → 標 Ended ----
+            SELECT m.MatchId, m.ExternalId, m.Status AS OldStatus
+            INTO #stale
+            FROM dbo.Matches m
+            WHERE m.Status = 'Live'
+              AND (m.LastSeenLiveUtc IS NULL
+                   OR m.LastSeenLiveUtc < DATEADD(MINUTE, -@StaleGraceMinutes, SYSUTCDATETIME()));
+
+            UPDATE m SET m.Status = 'Ended'
+            FROM dbo.Matches m JOIN #stale st ON st.MatchId = m.MatchId;
+
+            INSERT INTO dbo.OutboxMessages (EventType, Payload)
+            SELECT 'MatchStatusChanged',
+                   (SELECT st.ExternalId AS matchExternalId, st.OldStatus AS oldStatus,
+                           'Ended' AS newStatus, NULL AS livePhase, SYSUTCDATETIME() AS changedUtc
+                    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+            FROM #stale st;
+            SET @ended = @@ROWCOUNT;
+            SET @statusChanges = @statusChanges + @ended;
+
+            DROP TABLE #live; DROP TABLE #calc; DROP TABLE #stale;
+        COMMIT;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK;
+        THROW;
+    END CATCH
+
+    SELECT
+        (SELECT COUNT(*) FROM @LiveStates) AS MatchesUpdated,
+        @scoreChanges  AS ScoreChanges,
+        @statusChanges AS StatusChanges,
+        @oddsInserted  AS OddsSnapshotsInserted,
+        @oddsChanged   AS OddsChangedEvents,
+        @ended         AS MatchesEnded;
 END
 GO

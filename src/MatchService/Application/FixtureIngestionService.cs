@@ -37,4 +37,14 @@ public class FixtureIngestionService
             result.MatchesIn, result.MarketsIn, result.SelectionsIn, result.OddsSnapshotsInserted, result.OddsChangedEvents);
         return result;
     }
+
+    public async Task<LiveIngestResult> IngestLiveAsync(UpsertLiveRequest request, CancellationToken ct)
+    {
+        var result = await _repo.IngestLiveAsync(request, ct);
+        if (result.ScoreChanges > 0 || result.StatusChanges > 0 || result.OddsChangedEvents > 0 || result.MatchesEnded > 0)
+            _logger.LogInformation(
+                "Live 更新：場次 {Updated}、比分變動 {Score}、狀態變動 {Status}、賠率快照 {Odds}、結束 {Ended}",
+                result.MatchesUpdated, result.ScoreChanges, result.StatusChanges, result.OddsSnapshotsInserted, result.MatchesEnded);
+        return result;
+    }
 }

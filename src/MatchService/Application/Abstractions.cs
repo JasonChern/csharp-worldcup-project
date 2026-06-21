@@ -6,6 +6,7 @@ namespace WorldCup.MatchService.Application;
 public interface IFixtureRepository
 {
     Task<IngestResult> IngestBatchAsync(UpsertFixturesRequest request, CancellationToken ct);
+    Task<LiveIngestResult> IngestLiveAsync(UpsertLiveRequest request, CancellationToken ct);
 }
 
 /// <summary>讀取 port。</summary>
@@ -28,6 +29,8 @@ public record MatchSummary(
     string Status,
     int HomeScore,
     int AwayScore,
+    string? LivePhase,
+    string? MatchMinute,
     string? TournamentNameEn,
     string? TournamentNameZh,
     string HomeTeamEn,
@@ -40,6 +43,7 @@ public record MarketWithOdds(
     string MarketNameEn,
     string? MarketNameZh,
     decimal? Line,
+    string Source,                  // 'Pre'(賽前) / 'Live'(即時)
     string SelectionExternalId,
     string SelectionNameEn,
     string? SelectionNameZh,

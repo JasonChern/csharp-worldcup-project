@@ -27,6 +27,14 @@ app.MapPost("/api/fixtures/upsert", async (
     return Results.Ok(result);
 });
 
+// Live 擷取 → 更新比分/狀態 + in-play 賠率
+app.MapPost("/api/live/upsert", async (
+    UpsertLiveRequest request, FixtureIngestionService svc, CancellationToken ct) =>
+{
+    var result = await svc.IngestLiveAsync(request, ct);
+    return Results.Ok(result);
+});
+
 // 賽程列表（可選 tournament 過濾，世足為 29614）
 app.MapGet("/api/matches", async (
     string? tournament, IMatchReadRepository repo, CancellationToken ct) =>

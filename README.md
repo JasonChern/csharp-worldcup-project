@@ -21,8 +21,9 @@ src/
     Fetching/                    抓 en+zh JSON（來源 DTO + HttpClient）
     Mapping/                     合併 en+zh、過濾世足、換算賠率
     Publishing/                  POST 到 Match Service
+  LiveIngestion/                 ← M-Live：高頻抓 Live feed，解析 ldss（比分/狀態）+ in-play 賠率
   OutboxPublisher/               ← M3：輪詢 OutboxMessages → MassTransit/RabbitMQ → 標記已發
-  NotificationService/           ← M3：訂閱 OddsChanged → 印 log（先證明 Pub/Sub 通）
+  NotificationService/           ← M3+：訂閱 OddsChanged / MatchScoreChanged / MatchStatusChanged → 印 log
 db/
   01_schema.sql 02_types.sql 03_procedures.sql   啟動時由 DbInitializer 套用
 ```
@@ -35,8 +36,15 @@ db/
 ## 資料模型
 `Teams → Matches → Markets → MarketSelections → OddsSnapshots(時序)`
 - 前四層依各自 ExternalId 冪等 upsert；球隊以**英文名**為 key、`NameZh` 為中文。
-- 賠率 `DecimalOdds = pu/pd + 1`；`OddsSnapshots` **只在賠率變動時**寫（`sp_RecordOddsIfChanged`）。
+- 賠率 `DecimalOdds = pu/pd + 1`；`OddsSnapshots` **只在賠率變動時**寫。
 - 雙語：en 版為 canonical，zh 版依語言無關 id（`id`/`ms.id`/`cs.id`）對應填中文。
+- **資料來源區分（前端用）**：`Markets.Source` = `'Pre'`(賽前/deadball) / `'Live'`(即時)；`Matches.Status`(Scheduled/Live/Ended) + `LivePhase`/`MatchMinute`。
+
+## Live（M-Live：進行中）
+- 來源 `Live/Games`：`ldss`(字串化 JSON) 給比分/狀態/分鐘，`ms` 給 in-play 賠率，用 `er` 對回賽事。
+- 開賽即離開 Pre feed → 賽前盤看 Pre、in-play 盤看 Live（互補）。
+- `sp_IngestLiveBatch` 同交易內更新比分/狀態 + in-play 賠率，比分/狀態/賠率變動才發事件（`MatchScoreChanged`/`MatchStatusChanged`/`OddsChanged`）。
+- 比賽結束：feed 給 ended 或「從 feed 消失超過寬限」→ 標 Ended（對帳）。
 
 ## 啟動
 

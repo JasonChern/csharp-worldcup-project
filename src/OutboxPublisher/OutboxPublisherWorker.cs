@@ -67,18 +67,27 @@ public sealed class OutboxPublisherWorker : BackgroundService
         switch (row.EventType)
         {
             case "OddsChanged":
-                var evt = JsonSerializer.Deserialize<OddsChanged>(row.Payload, JsonOpts);
-                if (evt is null)
-                {
-                    _logger.LogWarning("Outbox #{Id} 反序列化為 null，跳過。", row.OutboxId);
-                    return false;
-                }
-                await _bus.Publish(evt, ct);
-                return true;
+                return await PublishTyped<OddsChanged>(row, ct);
+            case "MatchScoreChanged":
+                return await PublishTyped<MatchScoreChanged>(row, ct);
+            case "MatchStatusChanged":
+                return await PublishTyped<MatchStatusChanged>(row, ct);
             default:
                 _logger.LogWarning("未知事件型別 {Type}（Outbox #{Id}），跳過。", row.EventType, row.OutboxId);
                 return false;
         }
+    }
+
+    private async Task<bool> PublishTyped<T>(OutboxRow row, CancellationToken ct) where T : class
+    {
+        var evt = JsonSerializer.Deserialize<T>(row.Payload, JsonOpts);
+        if (evt is null)
+        {
+            _logger.LogWarning("Outbox #{Id} 反序列化為 null，跳過。", row.OutboxId);
+            return false;
+        }
+        await _bus.Publish(evt, ct);
+        return true;
     }
 
     private async Task WaitForDbAsync(CancellationToken ct)

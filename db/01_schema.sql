@@ -89,3 +89,18 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Outbox_Unprocessed')
     CREATE INDEX IX_Outbox_Unprocessed ON dbo.OutboxMessages(OutboxId) WHERE ProcessedUtc IS NULL;
 GO
+
+-- ---------- Live 欄位（M-Live；冪等 ALTER） ----------
+-- 前端需區分資料來源：Markets.Source = 'Pre'(賽前/deadball) 或 'Live'(即時/in-play)
+IF COL_LENGTH('dbo.Markets', 'Source') IS NULL
+    ALTER TABLE dbo.Markets ADD Source VARCHAR(10) NOT NULL CONSTRAINT DF_Markets_Source DEFAULT 'Pre';
+GO
+IF COL_LENGTH('dbo.Matches', 'LivePhase') IS NULL
+    ALTER TABLE dbo.Matches ADD LivePhase NVARCHAR(16) NULL;        -- raw status, e.g. "1h"
+GO
+IF COL_LENGTH('dbo.Matches', 'MatchMinute') IS NULL
+    ALTER TABLE dbo.Matches ADD MatchMinute NVARCHAR(8) NULL;       -- e.g. "1:15"
+GO
+IF COL_LENGTH('dbo.Matches', 'LastSeenLiveUtc') IS NULL
+    ALTER TABLE dbo.Matches ADD LastSeenLiveUtc DATETIME2 NULL;     -- 最近一次出現在 live feed
+GO
