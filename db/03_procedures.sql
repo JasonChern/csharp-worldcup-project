@@ -284,7 +284,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_IngestLiveBatch
     @Selections dbo.SelectionTvp READONLY,
     @Odds       dbo.OddsTvp      READONLY,
     @LiveStates dbo.LiveStateTvp READONLY,
-    @StaleGraceMinutes INT = 2
+    @StaleGraceMinutes INT = 10
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -368,13 +368,17 @@ BEGIN
             WHERE c.PrevOdds IS NOT NULL AND c.PrevOdds <> c.NewOdds;
             SET @oddsChanged = @@ROWCOUNT;
 
-            -- ---- 結束對帳：曾 Live 但已超過寬限未再出現 → 標 Ended ----
+            -- ---- 結束對帳 ----
+            -- 只在「從 feed 消失夠久(預設10分,涵蓋中場/空檔) 且 已超過開賽 150 分鐘
+            -- (正常 90 分+中場+傷停的上限)」才標 Ended，避免中場/資料源空檔誤判結束。
+            -- 真正結束多半也會由 feed 的 ended 狀態直接更新。
             SELECT m.MatchId, m.ExternalId, m.Status AS OldStatus
             INTO #stale
             FROM dbo.Matches m
             WHERE m.Status = 'Live'
               AND (m.LastSeenLiveUtc IS NULL
-                   OR m.LastSeenLiveUtc < DATEADD(MINUTE, -@StaleGraceMinutes, SYSUTCDATETIME()));
+                   OR m.LastSeenLiveUtc < DATEADD(MINUTE, -@StaleGraceMinutes, SYSUTCDATETIME()))
+              AND m.KickoffUtc < DATEADD(MINUTE, -150, SYSUTCDATETIME());
 
             UPDATE m SET m.Status = 'Ended'
             FROM dbo.Matches m JOIN #stale st ON st.MatchId = m.MatchId;

@@ -60,9 +60,13 @@ export function resync(
   return fresh;
 }
 
+// 超過此秒數沒收到新的權威時間，視為 feed 中斷(中場/空檔)，凍結走鐘避免暴衝
+const STALE_MS = 30_000;
+
 export function display(c: ClockState | undefined, nowMs: number): string | null {
   if (!c) return null;
-  const tick = c.anchorTickSec + (c.running ? Math.floor((nowMs - c.anchorMs) / 1000) : 0);
+  const stale = nowMs - c.anchorMs > STALE_MS;
+  const tick = c.anchorTickSec + (c.running && !stale ? Math.floor((nowMs - c.anchorMs) / 1000) : 0);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   const t = Math.max(0, tick);
   return c.isStoppage ? `${fmt(c.prefixSec)} +${fmt(t)}` : fmt(t);
