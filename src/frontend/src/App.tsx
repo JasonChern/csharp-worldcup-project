@@ -115,6 +115,17 @@ export function App() {
     };
   }, []);
 
+  const loadMarkets = async (id: string) => {
+    setMarkets([]);
+    try {
+      const rows = await fetchMatchMarkets(id);
+      setMarkets(rows);
+      seedOdds(rows.map((r) => [r.selectionExternalId, r.decimalOdds]));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const toggle = async (id: string) => {
     setSelectedSel(null);
     setHistory([]);
@@ -124,14 +135,17 @@ export function App() {
       return;
     }
     setExpandedId(id);
-    setMarkets([]);
-    try {
-      const rows = await fetchMatchMarkets(id);
-      setMarkets(rows);
-      seedOdds(rows.map((r) => [r.selectionExternalId, r.decimalOdds]));
-    } catch (e) {
-      console.error(e);
+    await loadMarkets(id);
+  };
+
+  // 從看板的 1X2 pill 直接點：展開該場並畫該選項走勢
+  const openInline = async (matchId: string, selId: string | null, name: string) => {
+    if (!selId) return;
+    if (expandedId !== matchId) {
+      setExpandedId(matchId);
+      await loadMarkets(matchId);
     }
+    openChart(selId, name);
   };
 
   const openChart = async (id: string, name: string) => {
@@ -173,9 +187,12 @@ export function App() {
                 </div>
                 <div style={{ textAlign: "left", fontWeight: 600 }}>{teamName(m.awayTeamZh, m.awayTeamEn)}</div>
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                  <OddsPill label="主" v={m.homeSelId ? odds[m.homeSelId] : null} />
-                  <OddsPill label="和" v={m.drawSelId ? odds[m.drawSelId] : null} />
-                  <OddsPill label="客" v={m.awaySelId ? odds[m.awaySelId] : null} />
+                  <OddsPill label="主" v={m.homeSelId ? odds[m.homeSelId] : null} selected={selectedSel?.id === m.homeSelId}
+                    onClick={() => openInline(m.externalId, m.homeSelId, `不讓分 · ${teamName(m.homeTeamZh, m.homeTeamEn)}`)} />
+                  <OddsPill label="和" v={m.drawSelId ? odds[m.drawSelId] : null} selected={selectedSel?.id === m.drawSelId}
+                    onClick={() => openInline(m.externalId, m.drawSelId, "不讓分 · 和局")} />
+                  <OddsPill label="客" v={m.awaySelId ? odds[m.awaySelId] : null} selected={selectedSel?.id === m.awaySelId}
+                    onClick={() => openInline(m.externalId, m.awaySelId, `不讓分 · ${teamName(m.awayTeamZh, m.awayTeamEn)}`)} />
                 </div>
               </div>
 
@@ -242,10 +259,20 @@ export function App() {
   );
 }
 
-function OddsPill({ label, v }: { label: string; v: number | null | undefined }) {
+function OddsPill({ label, v, selected, onClick }: { label: string; v: number | null | undefined; selected?: boolean; onClick?: () => void }) {
+  const clickable = v != null && onClick;
   return (
-    <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 6, background: "#eef", minWidth: 38, textAlign: "center" }}>
-      <span style={{ color: "#88a" }}>{label}</span>{" "}
+    <span
+      onClick={clickable ? (e) => { e.stopPropagation(); onClick!(); } : undefined}
+      title={clickable ? "點看賠率走勢" : undefined}
+      style={{
+        fontSize: 11, padding: "2px 6px", borderRadius: 6, minWidth: 38, textAlign: "center",
+        cursor: clickable ? "pointer" : "default",
+        background: selected ? "#1a1a2e" : "#eef",
+        color: selected ? "#fff" : "inherit",
+      }}
+    >
+      <span style={{ color: selected ? "#aab" : "#88a" }}>{label}</span>{" "}
       <b style={{ fontVariantNumeric: "tabular-nums" }}>{v == null ? "—" : v.toFixed(2)}</b>
     </span>
   );
