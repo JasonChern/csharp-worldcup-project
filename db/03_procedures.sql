@@ -265,7 +265,12 @@ BEGIN
         ORDER BY os.SnapshotId DESC
     ) o
     WHERE m.ExternalId = @MatchExternalId
-    ORDER BY k.MarketId, s.SelectionId;
+    ORDER BY
+        CASE k.Source WHEN 'Live' THEN 0 ELSE 1 END,           -- 即時盤優先
+        TRY_CONVERT(INT, k.MarketTypeCode),                    -- 玩法類型固定序
+        k.MarketId,
+        CASE s.Side WHEN 'H' THEN 0 WHEN 'D' THEN 1 WHEN 'A' THEN 2 ELSE 3 END,  -- 主/和/客
+        s.SelectionId;
 END
 GO
 
