@@ -1,0 +1,13 @@
+# Notification Service (Worker：訂閱 OddsChanged → 印 log)
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY WorldCupLiveHub.sln ./
+COPY src/Contracts/ src/Contracts/
+COPY src/NotificationService/ src/NotificationService/
+RUN dotnet restore src/NotificationService/WorldCup.NotificationService.csproj
+RUN dotnet publish src/NotificationService/WorldCup.NotificationService.csproj -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish ./
+ENTRYPOINT ["dotnet", "WorldCup.NotificationService.dll"]

@@ -57,7 +57,7 @@ public sealed class Worker : BackgroundService
         var result = await _matchService.UpsertFixturesAsync(request, ct);
         if (result is not null)
             _logger.LogInformation(
-                "上傳完成：賽事 {M}、玩法 {K}、選項 {S}、新增賠率快照 {O}",
-                result.MatchesIn, result.MarketsIn, result.SelectionsIn, result.OddsSnapshotsInserted);
+                "上傳完成：賽事 {M}、玩法 {K}、選項 {S}、新增賠率快照 {O}、變動事件 {E}",
+                result.MatchesIn, result.MarketsIn, result.SelectionsIn, result.OddsSnapshotsInserted, result.OddsChangedEvents);
     }
 }

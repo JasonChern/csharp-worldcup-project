@@ -75,3 +75,17 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Odds_Selection_Time')
     CREATE INDEX IX_Odds_Selection_Time ON dbo.OddsSnapshots(SelectionId, SnapshotId DESC);
 GO
+
+-- ---------- OutboxMessages (Outbox Pattern) ----------
+IF OBJECT_ID('dbo.OutboxMessages') IS NULL
+CREATE TABLE dbo.OutboxMessages (
+    OutboxId     BIGINT IDENTITY PRIMARY KEY,
+    EventType    NVARCHAR(200) NOT NULL,          -- 事件鑑別字（如 'OddsChanged'）
+    Payload      NVARCHAR(MAX) NOT NULL,          -- JSON
+    CreatedUtc   DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    ProcessedUtc DATETIME2 NULL                   -- NULL = 尚未發送
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Outbox_Unprocessed')
+    CREATE INDEX IX_Outbox_Unprocessed ON dbo.OutboxMessages(OutboxId) WHERE ProcessedUtc IS NULL;
+GO

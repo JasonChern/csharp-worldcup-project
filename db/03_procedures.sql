@@ -121,7 +121,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_IngestWorldCupBatch
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @oddsInserted INT = 0;
+    DECLARE @oddsInserted INT = 0, @oddsChanged INT = 0;
     BEGIN TRY
         BEGIN TRAN;
             EXEC dbo.sp_UpsertTeams      @Teams;
@@ -129,18 +129,46 @@ BEGIN
             EXEC dbo.sp_UpsertMarkets    @Markets;
             EXEC dbo.sp_UpsertSelections @Selections;
 
-            INSERT INTO dbo.OddsSnapshots (SelectionId, Pd, Pu, DecimalOdds)
-            SELECT s.SelectionId, o.Pd, o.Pu, o.DecimalOdds
+            -- 比對每個選項的最新賠率（prev）與本次（new）
+            SELECT s.SelectionId, s.ExternalId AS SelExt, s.NameEn AS SelName, s.Side,
+                   k.ExternalId AS MarketExt, mt.ExternalId AS MatchExt,
+                   o.Pd, o.Pu, o.DecimalOdds AS NewOdds, prev.DecimalOdds AS PrevOdds
+            INTO #calc
             FROM @Odds o
             JOIN dbo.MarketSelections s ON s.ExternalId = o.SelectionExternalId
+            JOIN dbo.Markets k  ON k.MarketId  = s.MarketId
+            JOIN dbo.Matches mt ON mt.MatchId  = k.MatchId
             OUTER APPLY (
                 SELECT TOP 1 last.DecimalOdds
                 FROM dbo.OddsSnapshots last
                 WHERE last.SelectionId = s.SelectionId
                 ORDER BY last.SnapshotId DESC
-            ) prev
-            WHERE prev.DecimalOdds IS NULL OR prev.DecimalOdds <> o.DecimalOdds;
+            ) prev;
+
+            -- 1) 快照：首次或有變動都寫
+            INSERT INTO dbo.OddsSnapshots (SelectionId, Pd, Pu, DecimalOdds)
+            SELECT SelectionId, Pd, Pu, NewOdds
+            FROM #calc
+            WHERE PrevOdds IS NULL OR PrevOdds <> NewOdds;
             SET @oddsInserted = @@ROWCOUNT;
+
+            -- 2) Outbox：只在「真正變動」時發（prev 已存在且不同），與寫入同交易
+            INSERT INTO dbo.OutboxMessages (EventType, Payload)
+            SELECT 'OddsChanged',
+                   (SELECT c.MatchExt        AS matchExternalId,
+                           c.MarketExt       AS marketExternalId,
+                           c.SelExt          AS selectionExternalId,
+                           c.Side            AS side,
+                           c.SelName         AS selectionNameEn,
+                           c.PrevOdds        AS oldOdds,
+                           c.NewOdds         AS newOdds,
+                           SYSUTCDATETIME()  AS changedUtc
+                    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+            FROM #calc c
+            WHERE c.PrevOdds IS NOT NULL AND c.PrevOdds <> c.NewOdds;
+            SET @oddsChanged = @@ROWCOUNT;
+
+            DROP TABLE #calc;
         COMMIT;
     END TRY
     BEGIN CATCH
@@ -152,7 +180,32 @@ BEGIN
         (SELECT COUNT(*) FROM @Matches) AS MatchesIn,
         (SELECT COUNT(*) FROM @Markets) AS MarketsIn,
         (SELECT COUNT(*) FROM @Selections) AS SelectionsIn,
-        @oddsInserted AS OddsSnapshotsInserted;
+        @oddsInserted AS OddsSnapshotsInserted,
+        @oddsChanged  AS OddsChangedEvents;
+END
+GO
+
+-- ---------- Outbox dequeue / mark ----------
+CREATE OR ALTER PROCEDURE dbo.sp_GetUnprocessedOutbox
+    @Take INT = 100
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@Take) OutboxId, EventType, Payload, CreatedUtc
+    FROM dbo.OutboxMessages
+    WHERE ProcessedUtc IS NULL
+    ORDER BY OutboxId;
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.sp_MarkOutboxProcessed
+    @OutboxId BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.OutboxMessages
+    SET ProcessedUtc = SYSUTCDATETIME()
+    WHERE OutboxId = @OutboxId AND ProcessedUtc IS NULL;
 END
 GO
 

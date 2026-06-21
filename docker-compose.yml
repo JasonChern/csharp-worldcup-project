@@ -15,6 +15,18 @@ services:
       retries: 12
       start_period: 20s
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"      # AMQP
+      - "15672:15672"    # 管理介面 http://localhost:15672 (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
   matchservice:
     build:
       context: .
@@ -38,6 +50,30 @@ services:
       Ingestion__IntervalSeconds: "300"
     depends_on:
       - matchservice
+
+  outboxpublisher:
+    build:
+      context: .
+      dockerfile: Dockerfile.outboxpublisher
+    environment:
+      ConnectionStrings__MatchDb: "Server=sqlserver,1433;Database=MatchDb;User Id=sa;Password=Your_strong_Pass123;TrustServerCertificate=True;Encrypt=False"
+      RabbitMq__Host: "rabbitmq"
+      Outbox__IntervalSeconds: "5"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notificationservice:
+    build:
+      context: .
+      dockerfile: Dockerfile.notificationservice
+    environment:
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   mssql-data:

@@ -21,9 +21,16 @@ src/
     Fetching/                    抓 en+zh JSON（來源 DTO + HttpClient）
     Mapping/                     合併 en+zh、過濾世足、換算賠率
     Publishing/                  POST 到 Match Service
+  OutboxPublisher/               ← M3：輪詢 OutboxMessages → MassTransit/RabbitMQ → 標記已發
+  NotificationService/           ← M3：訂閱 OddsChanged → 印 log（先證明 Pub/Sub 通）
 db/
   01_schema.sql 02_types.sql 03_procedures.sql   啟動時由 DbInitializer 套用
 ```
+
+## Pub/Sub（M3：Outbox Pattern + RabbitMQ）
+- `sp_IngestWorldCupBatch` 在**同一交易**內寫 `OddsSnapshots` 與 `OutboxMessages`（賠率**真正變動**才寫事件，首次載入不算）。
+- `OutboxPublisher` 輪詢未發送事件 → MassTransit 發布 `OddsChanged` 到 RabbitMQ → 標記 `ProcessedUtc`（at-least-once）。
+- `NotificationService` 訂閱 `OddsChanged` 並印 log。
 
 ## 資料模型
 `Teams → Matches → Markets → MarketSelections → OddsSnapshots(時序)`
@@ -40,7 +47,8 @@ docker compose up --build
 啟動後：
 - Match Service：http://localhost:5080
 - SQL Server：localhost:1433（sa / Your_strong_Pass123）
-- Ingestion 每 5 分鐘擷取一次，將世足賽事寫入 DB
+- RabbitMQ 管理介面：http://localhost:15672（guest / guest）
+- Ingestion 每 5 分鐘擷取一次；賠率變動 → OutboxPublisher 發布 → NotificationService 收到印 log
 
 ## API
 

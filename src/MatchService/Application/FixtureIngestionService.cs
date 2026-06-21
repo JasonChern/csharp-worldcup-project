@@ -33,8 +33,8 @@ public class FixtureIngestionService
 
         var result = await _repo.IngestBatchAsync(request, ct);
         _logger.LogInformation(
-            "Ingest 完成：賽事 {Matches}、玩法 {Markets}、選項 {Selections}、新增賠率快照 {Snapshots}",
-            result.MatchesIn, result.MarketsIn, result.SelectionsIn, result.OddsSnapshotsInserted);
+            "Ingest 完成：賽事 {Matches}、玩法 {Markets}、選項 {Selections}、新增賠率快照 {Snapshots}、變動事件 {Events}",
+            result.MatchesIn, result.MarketsIn, result.SelectionsIn, result.OddsSnapshotsInserted, result.OddsChangedEvents);
         return result;
     }
 }

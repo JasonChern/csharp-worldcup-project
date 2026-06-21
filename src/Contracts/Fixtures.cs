@@ -38,4 +38,5 @@ public record IngestResult(
     int MatchesIn,
     int MarketsIn,
     int SelectionsIn,
-    int OddsSnapshotsInserted);
+    int OddsSnapshotsInserted,
+    int OddsChangedEvents = 0);
