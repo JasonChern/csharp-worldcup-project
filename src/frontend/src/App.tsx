@@ -14,6 +14,8 @@ const C = {
 const teamName = (zh: string | null, en: string) => zh ?? en;
 const fmtOdds = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(2));
 const hhmmss = (iso: string) => new Date(iso.endsWith("Z") ? iso : iso + "Z").toLocaleTimeString("zh-TW", { hour12: false });
+const fmtKickoff = (iso: string) =>
+  new Date(iso.endsWith("Z") ? iso : iso + "Z").toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 
 function statusLabel(m: Match, clockText: string | null): string {
   if (m.status === "Live") return `${m.livePhase ?? ""} ${clockText ?? m.matchMinute ?? "進行中"}`.trim();
@@ -136,11 +138,20 @@ export function App() {
                 <div onClick={() => toggle(m.externalId)} style={{ display: "grid", gridTemplateColumns: "1fr 120px 1fr 168px", alignItems: "center", gap: 10, padding: "14px 18px", cursor: "pointer" }}>
                   <div style={{ textAlign: "right", fontWeight: 600, fontSize: 15 }}>{teamName(m.homeTeamZh, m.homeTeamEn)}</div>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 24, fontWeight: 800, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{m.homeScore}<span style={{ color: C.muted, margin: "0 6px" }}>:</span>{m.awayScore}</div>
-                    <div style={{ fontSize: 11, marginTop: 3, display: "inline-block", padding: "1px 8px", borderRadius: 999, fontWeight: 600, background: live ? "#fdeaea" : "#f0f0f6", color: live ? C.live : C.muted, fontVariantNumeric: "tabular-nums" }}>
-                      {live && <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: C.live, marginRight: 5, verticalAlign: "middle" }} />}
-                      {statusLabel(m, display(clocks[m.externalId], nowMs))}
-                    </div>
+                    {m.status === "Scheduled" ? (
+                      <>
+                        <div style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>{fmtKickoff(m.kickoffUtc)}</div>
+                        <div style={{ fontSize: 11, marginTop: 3, display: "inline-block", padding: "1px 8px", borderRadius: 999, fontWeight: 600, background: "#f0f0f6", color: C.muted }}>未開賽</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 24, fontWeight: 800, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{m.homeScore}<span style={{ color: C.muted, margin: "0 6px" }}>:</span>{m.awayScore}</div>
+                        <div style={{ fontSize: 11, marginTop: 3, display: "inline-block", padding: "1px 8px", borderRadius: 999, fontWeight: 600, background: live ? "#fdeaea" : "#f0f0f6", color: live ? C.live : C.muted, fontVariantNumeric: "tabular-nums" }}>
+                          {live && <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: C.live, marginRight: 5, verticalAlign: "middle" }} />}
+                          {statusLabel(m, display(clocks[m.externalId], nowMs))}
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div style={{ textAlign: "left", fontWeight: 600, fontSize: 15 }}>{teamName(m.awayTeamZh, m.awayTeamEn)}</div>
                   <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
