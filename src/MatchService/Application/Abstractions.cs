@@ -14,7 +14,10 @@ public interface IMatchReadRepository
 {
     Task<IReadOnlyList<MatchSummary>> GetMatchesAsync(string? tournamentExternalId, CancellationToken ct);
     Task<IReadOnlyList<MarketWithOdds>> GetMatchMarketsAsync(string matchExternalId, CancellationToken ct);
+    Task<IReadOnlyList<OddsPoint>> GetOddsHistoryAsync(string selectionExternalId, CancellationToken ct);
 }
+
+public record OddsPoint(decimal DecimalOdds, DateTime FetchedUtc);
 
 /// <summary>DB 初始化 port（執行 schema/types/procedures 腳本）。</summary>
 public interface IDbInitializer

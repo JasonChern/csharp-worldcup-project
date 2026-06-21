@@ -400,3 +400,17 @@ BEGIN
         @ended         AS MatchesEnded;
 END
 GO
+
+-- ---------- 賠率走勢（時序） ----------
+CREATE OR ALTER PROCEDURE dbo.sp_GetOddsHistory
+    @SelectionExternalId NVARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT os.DecimalOdds, os.FetchedUtc
+    FROM dbo.OddsSnapshots os
+    JOIN dbo.MarketSelections s ON s.SelectionId = os.SelectionId
+    WHERE s.ExternalId = @SelectionExternalId
+    ORDER BY os.SnapshotId;
+END
+GO

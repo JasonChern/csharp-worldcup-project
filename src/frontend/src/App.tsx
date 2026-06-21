@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
-import { fetchMatches, fetchMatchMarkets, Match, MarketRow, REALTIME_URL } from "./api";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { fetchMatches, fetchMatchMarkets, fetchOddsHistory, Match, MarketRow, OddsPoint, REALTIME_URL } from "./api";
 import { ClockState, display, isPausedPhase, resync } from "./clock";
+
+const hhmmss = (iso: string) => {
+  const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+  return d.toLocaleTimeString("zh-TW", { hour12: false });
+};
 
 type Conn = "connecting" | "connected" | "disconnected";
 
@@ -25,6 +31,10 @@ export function App() {
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [markets, setMarkets] = useState<MarketRow[]>([]);
+  const [selectedSel, setSelectedSel] = useState<{ id: string; name: string } | null>(null);
+  const [history, setHistory] = useState<OddsPoint[]>([]);
+  const selectedSelRef = useRef<string | null>(null);
+  selectedSelRef.current = selectedSel?.id ?? null;
 
   // 每秒重繪，讓走鐘平滑前進
   useEffect(() => {
@@ -81,9 +91,11 @@ export function App() {
       })
     );
 
-    hub.on("OddsUpdated", (p: { matchExternalId: string; selectionExternalId: string; newOdds: number }) =>
-      setOdds((prev) => ({ ...prev, [p.selectionExternalId]: p.newOdds }))
-    );
+    hub.on("OddsUpdated", (p: { matchExternalId: string; selectionExternalId: string; newOdds: number }) => {
+      setOdds((prev) => ({ ...prev, [p.selectionExternalId]: p.newOdds }));
+      if (p.selectionExternalId === selectedSelRef.current)
+        setHistory((prev) => [...prev, { decimalOdds: p.newOdds, fetchedUtc: new Date().toISOString() }]);
+    });
 
     hub.on("ClockUpdated", (p: { matchExternalId: string; matchMinute: string | null; livePhase: string | null; running: boolean }) =>
       setClocks((prev) => {
@@ -104,6 +116,8 @@ export function App() {
   }, []);
 
   const toggle = async (id: string) => {
+    setSelectedSel(null);
+    setHistory([]);
     if (expandedId === id) {
       setExpandedId(null);
       setMarkets([]);
@@ -115,6 +129,16 @@ export function App() {
       const rows = await fetchMatchMarkets(id);
       setMarkets(rows);
       seedOdds(rows.map((r) => [r.selectionExternalId, r.decimalOdds]));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const openChart = async (id: string, name: string) => {
+    setSelectedSel({ id, name });
+    setHistory([]);
+    try {
+      setHistory(await fetchOddsHistory(id));
     } catch (e) {
       console.error(e);
     }
@@ -167,15 +191,45 @@ export function App() {
                           <SourceTag source={g.source} />
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {g.selections.map((s) => (
-                            <span key={s.selectionExternalId} style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, background: "#f1f1f8", whiteSpace: "nowrap" }}>
-                              {s.selectionNameZh ?? s.selectionNameEn}{" "}
-                              <b style={{ fontVariantNumeric: "tabular-nums" }}>{fmtOdds(odds[s.selectionExternalId])}</b>
-                            </span>
-                          ))}
+                          {g.selections.map((s) => {
+                            const sel = selectedSel?.id === s.selectionExternalId;
+                            const name = s.selectionNameZh ?? s.selectionNameEn;
+                            return (
+                              <span
+                                key={s.selectionExternalId}
+                                onClick={() => openChart(s.selectionExternalId, `${g.marketNameZh ?? g.marketNameEn} · ${name}`)}
+                                title="點看賠率走勢"
+                                style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, cursor: "pointer", whiteSpace: "nowrap", background: sel ? "#1a1a2e" : "#f1f1f8", color: sel ? "#fff" : "inherit" }}
+                              >
+                                {name} <b style={{ fontVariantNumeric: "tabular-nums" }}>{fmtOdds(odds[s.selectionExternalId])}</b>
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
                     ))
+                  )}
+
+                  {selectedSel && (
+                    <div style={{ marginTop: 8, borderTop: "1px dashed #ddd", paddingTop: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                        📈 賠率走勢：{selectedSel.name}
+                        <span style={{ color: "#999", fontWeight: 400 }}>（{history.length} 點）</span>
+                      </div>
+                      {history.length < 2 ? (
+                        <div style={{ fontSize: 12, color: "#999" }}>資料點不足，等賠率變動或更多歷史…</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={history.map((p) => ({ t: hhmmss(p.fetchedUtc), odds: p.decimalOdds }))} margin={{ top: 5, right: 12, bottom: 0, left: -16 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                            <XAxis dataKey="t" tick={{ fontSize: 10 }} minTickGap={28} />
+                            <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} />
+                            <Tooltip />
+                            <Line type="stepAfter" dataKey="odds" stroke="#c33" dot={false} strokeWidth={2} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

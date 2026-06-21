@@ -29,4 +29,14 @@ public sealed class SqlMatchReadRepository : IMatchReadRepository
         var rows = await conn.QueryAsync<MarketWithOdds>(cmd);
         return rows.ToList();
     }
+
+    public async Task<IReadOnlyList<OddsPoint>> GetOddsHistoryAsync(string selectionExternalId, CancellationToken ct)
+    {
+        await using var conn = _factory.Create();
+        var cmd = new CommandDefinition("dbo.sp_GetOddsHistory",
+            new { SelectionExternalId = selectionExternalId },
+            commandType: CommandType.StoredProcedure, cancellationToken: ct);
+        var rows = await conn.QueryAsync<OddsPoint>(cmd);
+        return rows.ToList();
+    }
 }

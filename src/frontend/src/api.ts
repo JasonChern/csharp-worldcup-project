@@ -52,3 +52,14 @@ export async function fetchMatchMarkets(matchExternalId: string): Promise<Market
   if (!res.ok) throw new Error(`fetchMatchMarkets failed: ${res.status}`);
   return res.json();
 }
+
+export interface OddsPoint {
+  decimalOdds: number;
+  fetchedUtc: string;
+}
+
+export async function fetchOddsHistory(selectionExternalId: string): Promise<OddsPoint[]> {
+  const res = await fetch(`${MATCH_API}/api/odds-history?selection=${encodeURIComponent(selectionExternalId)}`);
+  if (!res.ok) throw new Error(`fetchOddsHistory failed: ${res.status}`);
+  return res.json();
+}

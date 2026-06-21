@@ -50,6 +50,16 @@ app.MapGet("/api/matches", async (
     return Results.Ok(matches);
 });
 
+// 單一選項的賠率走勢（時序）
+app.MapGet("/api/odds-history", async (
+    string selection, IMatchReadRepository repo, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(selection))
+        return Results.BadRequest(new { error = "缺少 selection（SelectionExternalId）" });
+    var points = await repo.GetOddsHistoryAsync(selection, ct);
+    return Results.Ok(points);
+});
+
 // 某場比賽的玩法 + 各選項最新賠率
 app.MapGet("/api/match-markets", async (
     string match, IMatchReadRepository repo, CancellationToken ct) =>
